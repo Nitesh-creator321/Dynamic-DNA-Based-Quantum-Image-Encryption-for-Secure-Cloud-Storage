@@ -1,0 +1,4 @@
+/* Remove defaults from index.css to avoid conflicts with our App.css */
+body {
+  margin: 0;
+}

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.env
+
+# Node / React
+frontend/node_modules/
+frontend/dist/
+frontend/.npm/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.tiff
+*.png
+*.jpg
+*.jpeg
