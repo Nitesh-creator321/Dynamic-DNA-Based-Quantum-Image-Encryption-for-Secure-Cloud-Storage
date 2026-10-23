@@ -4,6 +4,9 @@ import cv2
 import time
 import argparse
 import numpy as np
+
+if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 from encryption.encryptor import QuantumDNAEncryptor
 from decryption.decryptor import QuantumDNADecryptor
 
