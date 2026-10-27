@@ -26,7 +26,8 @@ from encryption.file_encryptor import QuantumDNAFileEncryptor
 from decryption.file_decryptor import QuantumDNAFileDecryptor
 from metrics.metrics import (
     calculate_psnr, calculate_mse, calculate_entropy,
-    calculate_npcr, calculate_uaci, calculate_correlation
+    calculate_npcr, calculate_uaci, calculate_correlation,
+    calculate_file_metrics
 )
 from metrics.visuals import plot_histogram, plot_correlation
 
@@ -304,13 +305,21 @@ async def analyze_route(
         "corr_d": float(calculate_correlation(C, 'd'))
     }
 
-    P_gray = cv2.cvtColor(P, cv2.COLOR_BGR2GRAY) if len(P.shape) == 3 else P
-    C_gray = cv2.cvtColor(C, cv2.COLOR_BGR2GRAY) if len(C.shape) == 3 else C
+    if len(P.shape) == 3 and P.shape[2] == 4:
+        P_clean = P[:, :, :3]
+    else:
+        P_clean = P
+    P_gray = cv2.cvtColor(P_clean, cv2.COLOR_BGR2GRAY) if len(P_clean.shape) == 3 else P_clean
 
-    fig_hist = plot_histogram(P_gray, C_gray)
-    fig_cor_h = plot_correlation(C_gray, 'h', "Cipher Horizontal Correlation")
-    fig_cor_v = plot_correlation(C_gray, 'v', "Cipher Vertical Correlation")
-    fig_cor_d = plot_correlation(C_gray, 'd', "Cipher Diagonal Correlation")
+    # Use raw cipher bytes for the histogram. Do not apply BGR2GRAY channel blending,
+    # which averages independent channels into an artificial bell curve.
+    fig_hist = plot_histogram(P_gray, C.flatten())
+
+    # For correlation phase portrait, evaluate a pure single channel to avoid weighted blending
+    C_corr = C[:, :, 0] if len(C.shape) == 3 else C
+    fig_cor_h = plot_correlation(C_corr, 'h', "Horizontal Adjacent Correlation")
+    fig_cor_v = plot_correlation(C_corr, 'v', "Vertical Adjacent Correlation")
+    fig_cor_d = plot_correlation(C_corr, 'd', "Diagonal Adjacent Correlation")
 
     charts = {
         "histogram": figure_to_base64(fig_hist),
@@ -323,6 +332,21 @@ async def analyze_route(
         "metrics": metrics,
         "charts": charts
     }
+
+@app.post("/api/analyze_file")
+async def analyze_file_route(
+    plain_file: UploadFile = File(...),
+    cipher_file: UploadFile = File(...),
+    elapsed_sec: Optional[float] = Form(None)
+):
+    p_contents = await plain_file.read()
+    c_contents = await cipher_file.read()
+    
+    if len(p_contents) == 0 or len(c_contents) == 0:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+        
+    metrics = calculate_file_metrics(p_contents, c_contents, elapsed_sec)
+    return {"metrics": metrics}
 
 frontend_dist = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):

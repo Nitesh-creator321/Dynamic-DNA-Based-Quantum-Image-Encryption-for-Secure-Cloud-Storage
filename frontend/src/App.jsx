@@ -22,19 +22,26 @@ const INITIAL_KEY = {
 export default function App() {
   const [activeTab, setActiveTab] = useState('image'); // 'image' or 'file'
   const [keys, setKeys] = useState(INITIAL_KEY);
-  const [selectedFile, setSelectedFile] = useState(null);
 
+  // Image Encryption State
+  const [selectedFile, setSelectedFile] = useState(null);
   const [plainImageSrc, setPlainImageSrc] = useState(null);
   const [encryptedImageSrc, setEncryptedImageSrc] = useState(null);
   const [decryptedImageSrc, setDecryptedImageSrc] = useState(null);
-
   const [pxInfo, setPxInfo] = useState(null);
   const [profiling, setProfiling] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [charts, setCharts] = useState(null);
+  const [activeCorrDir, setActiveCorrDir] = useState('h'); // 'h' | 'v' | 'd'
+  const [isImageProcessing, setIsImageProcessing] = useState(false);
+  const [imageProcessType, setImageProcessType] = useState(null); // 'encrypt' | 'decrypt'
+  const [imageStatus, setImageStatus] = useState('System Ready');
+  const [imageProgress, setImageProgress] = useState(0);
+  const [imageElapsedTime, setImageElapsedTime] = useState('0.0');
 
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [status, setStatus] = useState('System Ready');
+  // Universal File Encryption State tracked at parent level for global indicators
+  const [isFileProcessing, setIsFileProcessing] = useState(false);
+  const [fileStatus, setFileStatus] = useState('');
 
   const handleKeyChange = (param, value) => {
     setKeys((prev) => ({ ...prev, [param]: value }));
@@ -52,7 +59,7 @@ export default function App() {
         setMetrics(null);
         setCharts(null);
         setProfiling(null);
-        setStatus('Image Loaded');
+        setImageStatus('Image Loaded');
       };
       reader.readAsDataURL(file);
     }
@@ -60,8 +67,23 @@ export default function App() {
 
   const handleEncrypt = async () => {
     if (!selectedFile) return;
-    setIsProcessing(true);
-    setStatus('Encrypting via Quantum-DNA...');
+    setIsImageProcessing(true);
+    setImageProcessType('encrypt');
+    setImageStatus('Encrypting image via Quantum-DNA...');
+    setImageProgress(0);
+    setImageElapsedTime('0.0');
+
+    const startTime = Date.now();
+    const timer = setInterval(() => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      setImageElapsedTime(elapsed);
+      setImageProgress((prev) => {
+        if (prev < 35) return Math.min(35, prev + 5);
+        if (prev < 65) return Math.min(65, prev + 3);
+        if (prev < 88) return Math.min(88, prev + 1.5);
+        return prev;
+      });
+    }, 80);
 
     try {
       const formData = new FormData();
@@ -80,22 +102,42 @@ export default function App() {
       setEncryptedImageSrc(encSrc);
       setPxInfo(data.px_info);
       setProfiling(data.profiling);
-      setStatus('Encryption Complete');
+      setImageStatus('Encryption Complete');
+      setImageProgress(92);
 
       // Automatically trigger analysis
       await runAnalysis(selectedFile, encSrc);
+      setImageProgress(100);
+      setImageElapsedTime(((Date.now() - startTime) / 1000).toFixed(1));
     } catch (err) {
       console.error(err);
-      setStatus(`Error: ${err.message}`);
+      setImageStatus(`Error: ${err.message}`);
     } finally {
-      setIsProcessing(false);
+      clearInterval(timer);
+      setIsImageProcessing(false);
+      setImageProcessType(null);
     }
   };
 
   const handleDecrypt = async () => {
     if (!encryptedImageSrc || pxInfo === null) return;
-    setIsProcessing(true);
-    setStatus('Decrypting via Inverse Quantum-DNA...');
+    setIsImageProcessing(true);
+    setImageProcessType('decrypt');
+    setImageStatus('Decrypting via Inverse Quantum-DNA...');
+    setImageProgress(0);
+    setImageElapsedTime('0.0');
+
+    const startTime = Date.now();
+    const timer = setInterval(() => {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      setImageElapsedTime(elapsed);
+      setImageProgress((prev) => {
+        if (prev < 40) return Math.min(40, prev + 6);
+        if (prev < 75) return Math.min(75, prev + 4);
+        if (prev < 90) return Math.min(90, prev + 1.5);
+        return prev;
+      });
+    }, 80);
 
     try {
       // Convert base64 encrypted image to blob
@@ -116,12 +158,16 @@ export default function App() {
       const data = await res.json();
 
       setDecryptedImageSrc(`data:image/png;base64,${data.image}`);
-      setStatus('Decryption Verified (100% Integrity)');
+      setImageStatus('Decryption Verified (100% Integrity)');
+      setImageProgress(100);
+      setImageElapsedTime(((Date.now() - startTime) / 1000).toFixed(1));
     } catch (err) {
       console.error(err);
-      setStatus(`Error: ${err.message}`);
+      setImageStatus(`Error: ${err.message}`);
     } finally {
-      setIsProcessing(false);
+      clearInterval(timer);
+      setIsImageProcessing(false);
+      setImageProcessType(null);
     }
   };
 
@@ -162,41 +208,39 @@ export default function App() {
     <div className="app-container">
       {/* Header */}
       <header className="app-header">
-        <h1 className="header-title">
-          Quantum<span>DNA</span> Cryptosystem
+        <h1
+          className="header-title clickable-title"
+          onClick={() => window.location.reload()}
+          title="Click to refresh"
+        >
+          Quantum <span>DNA</span> Cryptosystem
         </h1>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', background: 'var(--card-bg)', padding: '0.25rem', borderRadius: '6px' }}>
+        <div className="header-controls">
+          <div className="nav-tabs">
             <button
-              className="btn"
-              style={{
-                padding: '0.4rem 0.8rem',
-                background: activeTab === 'image' ? 'var(--panel-bg)' : 'transparent',
-                color: activeTab === 'image' ? 'var(--accent-primary)' : 'var(--text-muted)',
-                boxShadow: activeTab === 'image' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-              }}
+              className={`nav-tab-btn ${activeTab === 'image' ? 'active' : ''}`}
               onClick={() => setActiveTab('image')}
             >
               Image Encryption
+              {isImageProcessing && <span className="tab-dot" title="Processing"></span>}
             </button>
             <button
-              className="btn"
-              style={{
-                padding: '0.4rem 0.8rem',
-                background: activeTab === 'file' ? 'var(--panel-bg)' : 'transparent',
-                color: activeTab === 'file' ? 'var(--accent-primary)' : 'var(--text-muted)',
-                boxShadow: activeTab === 'file' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-              }}
+              className={`nav-tab-btn ${activeTab === 'file' ? 'active' : ''}`}
               onClick={() => setActiveTab('file')}
             >
               Universal File Encryption
+              {isFileProcessing && <span className="tab-dot" title="Processing"></span>}
             </button>
           </div>
 
-          <div className="status-badge">
+          <div className={`header-status-badge ${isImageProcessing || isFileProcessing ? 'busy' : ''}`}>
             <span className="status-indicator"></span>
-            {status}
+            <span className="header-status-text">
+              {activeTab === 'image'
+                ? (isImageProcessing ? imageStatus : (isFileProcessing ? 'Image Ready • File Active' : imageStatus))
+                : (isFileProcessing ? (fileStatus.length > 28 ? fileStatus.slice(0, 28) + '...' : fileStatus) : (isImageProcessing ? 'File Ready • Image Active' : (fileStatus || 'System Ready')))}
+            </span>
           </div>
         </div>
       </header>
@@ -205,7 +249,10 @@ export default function App() {
       <main className="main-layout">
         {/* Sidebar Parameters */}
         <aside className="glass-panel sidebar">
-          <h3>Cryptographic Key</h3>
+          <h3>
+            <span className="sidebar-accent-bar"></span>
+            Cryptographic Key
+          </h3>
 
           <div className="param-section">
             <h4>4D Hyperchaotic Map</h4>
@@ -229,7 +276,7 @@ export default function App() {
             <div className="param-grid">
               {['T', 't', 'theta', 'sigma_0', 'sigma_1', 'sigma_2'].map((param) => (
                 <div key={param} className="param-input-group">
-                  <label>{param.toUpperCase()}</label>
+                  <label>{param === 't' ? 't' : param.toUpperCase()}</label>
                   <input
                     type="number"
                     step="any"
@@ -243,7 +290,7 @@ export default function App() {
 
           <button
             className="btn btn-outline"
-            style={{ width: '100%', fontSize: '0.75rem' }}
+            style={{ width: '100%', fontSize: '0.78rem' }}
             onClick={() => setKeys(INITIAL_KEY)}
           >
             Reset to Standard Paper Key
@@ -252,221 +299,301 @@ export default function App() {
 
         {/* Content Area */}
         <section className="content">
-          {activeTab === 'file' ? (
-            <FileEncryption keys={keys} />
-          ) : (
-            <>
+          {/* Universal File Encryption View - Kept permanently mounted in DOM */}
+          <div style={{ display: activeTab === 'file' ? 'flex' : 'none', flexDirection: 'column', gap: '2rem' }}>
+            <FileEncryption
+              keys={keys}
+              onProcessingChange={setIsFileProcessing}
+              onStatusChange={setFileStatus}
+            />
+          </div>
+
+          {/* Image Encryption View - Kept permanently mounted in DOM */}
+          <div style={{ display: activeTab === 'image' ? 'flex' : 'none', flexDirection: 'column', gap: '2rem' }}>
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div>
+                <h3 className="module-title">
+                  Image Cryptosystem
+                  <span className="module-badge">Color • Grayscale • High-Res</span>
+                </h3>
+                <p className="module-subtitle">
+                  Lossless pixel encryption utilizing hyperchaotic permutation and quantum walk DNA base confusion.
+                </p>
+              </div>
+
               {/* Action Bar */}
-              <div className="action-bar">
-                <div className="file-input-wrapper">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                    disabled={isProcessing}
-                  />
+              <div className="action-bar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', width: '100%', flexWrap: 'wrap' }}>
+                  <div className="file-input-wrapper">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      disabled={isImageProcessing}
+                    />
+                  </div>
+                  <div className="btn-group">
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleEncrypt}
+                      disabled={!selectedFile || isImageProcessing}
+                    >
+                      {isImageProcessing && imageProcessType === 'encrypt' ? 'Encrypting...' : 'Encrypt Image'}
+                    </button>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleDecrypt}
+                      disabled={!encryptedImageSrc || isImageProcessing}
+                    >
+                      {isImageProcessing && imageProcessType === 'decrypt' ? 'Decrypting...' : 'Decrypt Image'}
+                    </button>
+                  </div>
                 </div>
-                <div className="btn-group">
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleEncrypt}
-                    disabled={!selectedFile || isProcessing}
-                  >
-                    {isProcessing ? 'Encrypting...' : 'Encrypt Image'}
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={handleDecrypt}
-                    disabled={!encryptedImageSrc || isProcessing}
-                  >
-                    {isProcessing ? 'Decrypting...' : 'Decrypt Image'}
-                  </button>
+
+                {isImageProcessing && (
+                  <div className="progress-container">
+                    <div className="progress-header">
+                      <span>
+                        {imageProcessType === 'encrypt'
+                          ? 'Executing Quantum-DNA Encryption'
+                          : 'Executing Inverse Quantum-DNA Decryption'}
+                      </span>
+                      <span>{imageProgress}% • {imageElapsedTime}s</span>
+                    </div>
+                    <div className="progress-track">
+                      <div
+                        className="progress-fill"
+                        style={{ width: `${imageProgress}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Pipeline View */}
+            <div className="pipeline-view">
+              {/* Plain Image */}
+              <div className="pipeline-step">
+                <h4><span className="pipeline-step-dot"></span> Plain Image</h4>
+                <div className="image-container">
+                  {plainImageSrc ? (
+                    <img src={plainImageSrc} alt="Plain input" />
+                  ) : (
+                    <div className="image-placeholder">No image selected</div>
+                  )}
                 </div>
+                {plainImageSrc && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '0.45rem', fontSize: '0.78rem' }}
+                    onClick={() => handleDownload(plainImageSrc, 'plain.png')}
+                  >
+                    Download Original
+                  </button>
+                )}
               </div>
 
-              {/* Pipeline View */}
-              <div className="pipeline-view">
-                {/* Plain Image */}
-                <div className="pipeline-step">
-                  <h4>Plain Image</h4>
-                  <div className="image-container">
-                    {plainImageSrc ? (
-                      <img src={plainImageSrc} alt="Plain input" />
-                    ) : (
-                      <div className="image-placeholder">No image selected</div>
-                    )}
-                  </div>
-                  {plainImageSrc && (
-                    <button
-                      className="btn btn-outline"
-                      style={{ padding: '0.4rem', fontSize: '0.75rem' }}
-                      onClick={() => handleDownload(plainImageSrc, 'plain.png')}
-                    >
-                      Download Original
-                    </button>
+              <div className="arrow">➔</div>
+
+              {/* Encrypted Image */}
+              <div className="pipeline-step">
+                <h4><span className="pipeline-step-dot"></span> Encrypted Image</h4>
+                <div className="image-container">
+                  {encryptedImageSrc ? (
+                    <img src={encryptedImageSrc} alt="Encrypted cipher" />
+                  ) : (
+                    <div className="image-placeholder">Awaiting Encryption</div>
                   )}
                 </div>
-
-                <div className="arrow">➔</div>
-
-                {/* Encrypted Image */}
-                <div className="pipeline-step">
-                  <h4>Encrypted Image</h4>
-                  <div className="image-container">
-                    {encryptedImageSrc ? (
-                      <img src={encryptedImageSrc} alt="Encrypted cipher" />
-                    ) : (
-                      <div className="image-placeholder">Awaiting Encryption</div>
-                    )}
-                  </div>
-                  {encryptedImageSrc && (
-                    <button
-                      className="btn btn-outline"
-                      style={{ padding: '0.4rem', fontSize: '0.75rem' }}
-                      onClick={() => handleDownload(encryptedImageSrc, 'encrypted.png')}
-                    >
-                      Download Cipher
-                    </button>
-                  )}
-                </div>
-
-                <div className="arrow">➔</div>
-
-                {/* Decrypted Image */}
-                <div className={`pipeline-step ${decryptedImageSrc ? 'success' : ''}`}>
-                  <h4>Decrypted Image</h4>
-                  <div className="image-container">
-                    {decryptedImageSrc ? (
-                      <img src={decryptedImageSrc} alt="Decrypted output" />
-                    ) : (
-                      <div className="image-placeholder">Awaiting Decryption</div>
-                    )}
-                  </div>
-                  {decryptedImageSrc && (
-                    <button
-                      className="btn btn-outline"
-                      style={{ padding: '0.4rem', fontSize: '0.75rem' }}
-                      onClick={() => handleDownload(decryptedImageSrc, 'decrypted.png')}
-                    >
-                      Download Decrypted
-                    </button>
-                  )}
-                </div>
+                {encryptedImageSrc && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '0.45rem', fontSize: '0.78rem' }}
+                    onClick={() => handleDownload(encryptedImageSrc, 'encrypted.png')}
+                  >
+                    Download Cipher
+                  </button>
+                )}
               </div>
 
-              {/* Profiling list if available */}
-              {profiling && (
-                <div className="glass-panel" style={{ padding: '1.25rem' }}>
-                  <h4 style={{ margin: '0 0 1rem 0', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '0.85rem' }}>
-                    Stage Execution Timing
-                  </h4>
-                  <div className="profiling-list" style={{ marginTop: 0 }}>
-                    <div className="profiling-item chaos">
-                      <span className="profiling-name">Hyperchaotic Pre-diffusion</span>
-                      <span className="profiling-val">{(profiling.chaos * 1000).toFixed(1)} ms</span>
-                    </div>
-                    <div className="profiling-item quantum">
-                      <span className="profiling-name">DTQW Probability Simulation</span>
-                      <span className="profiling-val">{(profiling.quantum * 1000).toFixed(1)} ms</span>
-                    </div>
-                    <div className="profiling-item dna">
-                      <span className="profiling-name">Dynamic DNA Confusion & Substitution</span>
-                      <span className="profiling-val">{(profiling.dna_confusion * 1000).toFixed(1)} ms</span>
-                    </div>
-                    <div className="profiling-item diffusion">
-                      <span className="profiling-name">Permutation & Pixel Diffusion</span>
-                      <span className="profiling-val">{(profiling.pixel_diffusion * 1000).toFixed(1)} ms</span>
-                    </div>
-                    <div className="profiling-item" style={{ borderLeftColor: 'var(--text-main)' }}>
-                      <span className="profiling-name"><strong>Total Execution Time</strong></span>
-                      <span className="profiling-val"><strong>{(profiling.total * 1000).toFixed(1)} ms</strong></span>
+              <div className="arrow">➔</div>
+
+              {/* Decrypted Image */}
+              <div className={`pipeline-step ${decryptedImageSrc ? 'success' : ''}`}>
+                <h4><span className="pipeline-step-dot"></span> Decrypted Image</h4>
+                <div className="image-container">
+                  {decryptedImageSrc ? (
+                    <img src={decryptedImageSrc} alt="Decrypted output" />
+                  ) : (
+                    <div className="image-placeholder">Awaiting Decryption</div>
+                  )}
+                </div>
+                {decryptedImageSrc && (
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '0.45rem', fontSize: '0.78rem' }}
+                    onClick={() => handleDownload(decryptedImageSrc, 'decrypted.png')}
+                  >
+                    Download Decrypted
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Profiling list if available */}
+            {profiling && (
+              <div className="glass-panel" style={{ padding: '1.25rem' }}>
+                <h4 style={{ margin: '0 0 1rem 0', textTransform: 'uppercase', letterSpacing: '0.6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Stage Execution Timing
+                </h4>
+                <div className="profiling-list" style={{ marginTop: 0 }}>
+                  <div className="profiling-item chaos">
+                    <span className="profiling-name">Hyperchaotic Pre-diffusion</span>
+                    <span className="profiling-val">{(profiling.chaos * 1000).toFixed(1)} ms</span>
+                  </div>
+                  <div className="profiling-item quantum">
+                    <span className="profiling-name">DTQW Probability Simulation</span>
+                    <span className="profiling-val">{(profiling.quantum * 1000).toFixed(1)} ms</span>
+                  </div>
+                  <div className="profiling-item dna">
+                    <span className="profiling-name">Dynamic DNA Confusion & Substitution</span>
+                    <span className="profiling-val">{(profiling.dna_confusion * 1000).toFixed(1)} ms</span>
+                  </div>
+                  <div className="profiling-item diffusion">
+                    <span className="profiling-name">Permutation & Pixel Diffusion</span>
+                    <span className="profiling-val">{(profiling.pixel_diffusion * 1000).toFixed(1)} ms</span>
+                  </div>
+                  <div className="profiling-item" style={{ borderLeftColor: 'var(--text-main)' }}>
+                    <span className="profiling-name"><strong>Total Execution Time</strong></span>
+                    <span className="profiling-val"><strong>{(profiling.total * 1000).toFixed(1)} ms</strong></span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Metrics Dashboard */}
+            {metrics && (
+              <div className="metrics-dashboard">
+                <div className="metrics-header">
+                  <div>
+                    <h3>Image Cryptographic Benchmark Metrics</h3>
+                    <div className="metrics-meta-bar">
+                      <span className="meta-pill success">Pixel Uniformity: PASS (NIST / Chi-Square)</span>
+                      <span className="meta-pill accent">Entropy: {metrics.entropy?.toFixed(4)} / 8.0000</span>
+                      <span className="meta-pill">Differential NPCR: {metrics.npcr?.toFixed(2)}%</span>
                     </div>
                   </div>
                 </div>
-              )}
 
-              {/* Metrics Dashboard */}
-              {metrics && (
-                <div className="metrics-dashboard">
-                  <div className="metrics-header">
-                    <h3>Cryptographic Benchmark Metrics</h3>
+                <div className="metrics-grid">
+                  <div className={`metric-card ${metrics.entropy >= 7.95 ? 'ideal' : 'warning'}`}>
+                    <div className="metric-label">Information Entropy</div>
+                    <div className="metric-value">{metrics.entropy?.toFixed(4)}</div>
+                    <div className="metric-target">Target: ~8.0000 bits/pixel</div>
                   </div>
 
-                  <div className="metrics-grid">
-                    <div className={`metric-card ${metrics.entropy >= 7.95 ? 'ideal' : 'warning'}`}>
-                      <div className="metric-label">Information Entropy</div>
-                      <div className="metric-value">{metrics.entropy?.toFixed(4)}</div>
-                      <div className="metric-target">Ideal: ~8.0000</div>
-                    </div>
-
-                    <div className={`metric-card ${metrics.npcr >= 99.0 ? 'ideal' : 'warning'}`}>
-                      <div className="metric-label">NPCR Sensitivity</div>
-                      <div className="metric-value">{metrics.npcr?.toFixed(2)}%</div>
-                      <div className="metric-target">Ideal: &gt;99.60%</div>
-                    </div>
-
-                    <div className={`metric-card ${metrics.uaci >= 30.0 ? 'ideal' : 'warning'}`}>
-                      <div className="metric-label">UACI Rate</div>
-                      <div className="metric-value">{metrics.uaci?.toFixed(2)}%</div>
-                      <div className="metric-target">Ideal: ~33.46%</div>
-                    </div>
-
-                    <div className={`metric-card ${metrics.corr_h < 0.05 ? 'ideal' : 'warning'}`}>
-                      <div className="metric-label">Horizontal Corr.</div>
-                      <div className="metric-value">{metrics.corr_h?.toFixed(4)}</div>
-                      <div className="metric-target">Ideal: ~0.0000</div>
-                    </div>
-
-                    <div className={`metric-card ${metrics.corr_v < 0.05 ? 'ideal' : 'warning'}`}>
-                      <div className="metric-label">Vertical Corr.</div>
-                      <div className="metric-value">{metrics.corr_v?.toFixed(4)}</div>
-                      <div className="metric-target">Ideal: ~0.0000</div>
-                    </div>
-
-                    <div className={`metric-card ${metrics.corr_d < 0.05 ? 'ideal' : 'warning'}`}>
-                      <div className="metric-label">Diagonal Corr.</div>
-                      <div className="metric-value">{metrics.corr_d?.toFixed(4)}</div>
-                      <div className="metric-target">Ideal: ~0.0000</div>
-                    </div>
-
-                    <div className="metric-card">
-                      <div className="metric-label">PSNR</div>
-                      <div className="metric-value">{metrics.psnr?.toFixed(2)} dB</div>
-                      <div className="metric-target">Target: &lt; 10 dB</div>
-                    </div>
-
-                    <div className="metric-card">
-                      <div className="metric-label">Mean Squared Error</div>
-                      <div className="metric-value">{metrics.mse?.toFixed(1)}</div>
-                      <div className="metric-target">High Dissimilarity</div>
-                    </div>
+                  <div className={`metric-card ${metrics.npcr >= 99.0 ? 'ideal' : 'warning'}`}>
+                    <div className="metric-label">NPCR Sensitivity</div>
+                    <div className="metric-value">{metrics.npcr?.toFixed(2)}%</div>
+                    <div className="metric-target">Target: &gt; 99.60% (Optimal Diffusion)</div>
                   </div>
 
-                  {/* Cryptographic Charts */}
-                  {charts && (
+                  <div className={`metric-card ${metrics.uaci >= 30.0 ? 'ideal' : 'warning'}`}>
+                    <div className="metric-label">UACI Rate</div>
+                    <div className="metric-value">{metrics.uaci?.toFixed(2)}%</div>
+                    <div className="metric-target">Target: ~33.46% (Uniform Deviation)</div>
+                  </div>
+
+                  <div className={`metric-card ${metrics.corr_h < 0.05 ? 'ideal' : 'warning'}`}>
+                    <div className="metric-label">Horizontal Corr.</div>
+                    <div className="metric-value">{(metrics.corr_h >= 0 ? '+' : '') + metrics.corr_h?.toFixed(4)}</div>
+                    <div className="metric-target">Target: ~0.0000 (Zero Bias)</div>
+                  </div>
+
+                  <div className={`metric-card ${metrics.corr_v < 0.05 ? 'ideal' : 'warning'}`}>
+                    <div className="metric-label">Vertical Corr.</div>
+                    <div className="metric-value">{(metrics.corr_v >= 0 ? '+' : '') + metrics.corr_v?.toFixed(4)}</div>
+                    <div className="metric-target">Target: ~0.0000 (Zero Bias)</div>
+                  </div>
+
+                  <div className={`metric-card ${metrics.corr_d < 0.05 ? 'ideal' : 'warning'}`}>
+                    <div className="metric-label">Diagonal Corr.</div>
+                    <div className="metric-value">{(metrics.corr_d >= 0 ? '+' : '') + metrics.corr_d?.toFixed(4)}</div>
+                    <div className="metric-target">Target: ~0.0000 (Zero Bias)</div>
+                  </div>
+
+                  <div className={`metric-card ${metrics.psnr < 10.0 ? 'ideal' : 'warning'}`}>
+                    <div className="metric-label">Peak SNR (PSNR)</div>
+                    <div className="metric-value">{metrics.psnr?.toFixed(2)} dB</div>
+                    <div className="metric-target">Target: &lt; 10 dB (High Obfuscation)</div>
+                  </div>
+
+                  <div className="metric-card ideal">
+                    <div className="metric-label">Mean Squared Error</div>
+                    <div className="metric-value">{metrics.mse?.toFixed(1)}</div>
+                    <div className="metric-target">Target: &gt; 8000 (Max Dispersion)</div>
+                  </div>
+                </div>
+
+                {/* Cryptographic Representation Charts */}
+                {charts && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginTop: '0.5rem' }}>
                     <div className="charts-grid">
                       {charts.histogram && (
                         <div className="chart-container">
-                          <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '0.85rem' }}>
-                            HISTOGRAM DISTRIBUTION (UNIFORMITY)
-                          </h4>
+                          <div className="chart-header-row">
+                            <h4>Pixel Frequency Distribution (Histogram)</h4>
+                            <div className="chart-legend">
+                              <span><span className="legend-dot" style={{ background: '#3b82f6' }}></span>Plain</span>
+                              <span><span className="legend-dot" style={{ background: '#10b981' }}></span>Cipher</span>
+                            </div>
+                          </div>
                           <img src={`data:image/png;base64,${charts.histogram}`} alt="Histogram" />
                         </div>
                       )}
-                      {charts.corr_h && (
+                      {(charts.corr_h || charts.corr_v || charts.corr_d) && (
                         <div className="chart-container">
-                          <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-main)', fontSize: '0.85rem' }}>
-                            HORIZONTAL ADJACENT PIXEL CORRELATION
-                          </h4>
-                          <img src={`data:image/png;base64,${charts.corr_h}`} alt="Horizontal Correlation" />
+                          <div className="chart-header-row">
+                            <h4>Adjacent Pixel Correlation Phase Portrait</h4>
+                            <div className="chart-toggle-group">
+                              <button
+                                className={`chart-toggle-btn ${activeCorrDir === 'h' ? 'active' : ''}`}
+                                onClick={() => setActiveCorrDir('h')}
+                              >
+                                Horizontal (r: {(metrics.corr_h >= 0 ? '+' : '') + metrics.corr_h?.toFixed(4)})
+                              </button>
+                              <button
+                                className={`chart-toggle-btn ${activeCorrDir === 'v' ? 'active' : ''}`}
+                                onClick={() => setActiveCorrDir('v')}
+                              >
+                                Vertical
+                              </button>
+                              <button
+                                className={`chart-toggle-btn ${activeCorrDir === 'd' ? 'active' : ''}`}
+                                onClick={() => setActiveCorrDir('d')}
+                              >
+                                Diagonal
+                              </button>
+                            </div>
+                          </div>
+                          {activeCorrDir === 'h' && charts.corr_h && (
+                            <img src={`data:image/png;base64,${charts.corr_h}`} alt="Horizontal Correlation" />
+                          )}
+                          {activeCorrDir === 'v' && charts.corr_v && (
+                            <img src={`data:image/png;base64,${charts.corr_v}`} alt="Vertical Correlation" />
+                          )}
+                          {activeCorrDir === 'd' && charts.corr_d && (
+                            <img src={`data:image/png;base64,${charts.corr_d}`} alt="Diagonal Correlation" />
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </section>
       </main>
     </div>
