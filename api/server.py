@@ -30,6 +30,7 @@ from metrics.metrics import (
     calculate_file_metrics
 )
 from metrics.visuals import plot_histogram, plot_correlation
+from utils.file_guard import FileContentGuard, SecurityValidationError
 
 app = FastAPI(title="Quantum DNA Image & File Encryption API")
 
@@ -146,6 +147,11 @@ async def encrypt_route(
 ):
     key = parse_key_from_form(a, b, c, d, x0, y0, z0, w0, T, B, theta, sigma_0, sigma_1, t, sigma_2)
     contents = await file.read()
+    try:
+        FileContentGuard.verify_image_file(contents[:64], file.filename or "image.png", contents)
+    except SecurityValidationError as err:
+        raise HTTPException(status_code=415, detail=str(err))
+
     img = decode_image(contents)
     if img is None:
         raise HTTPException(status_code=400, detail="Invalid image file")
@@ -182,6 +188,11 @@ async def decrypt_route(
 ):
     key = parse_key_from_form(a, b, c, d, x0, y0, z0, w0, T, B, theta, sigma_0, sigma_1, t, sigma_2)
     contents = await file.read()
+    try:
+        FileContentGuard.verify_image_file(contents[:64], file.filename or "encrypted.png")
+    except SecurityValidationError as err:
+        raise HTTPException(status_code=415, detail=str(err))
+
     enc_img = decode_image(contents)
     if enc_img is None:
         raise HTTPException(status_code=400, detail="Invalid encrypted image file")
@@ -214,6 +225,18 @@ async def encrypt_file_route(
     sigma_2: Optional[float] = Form(None)
 ):
     key = parse_key_from_form(a, b, c, d, x0, y0, z0, w0, T, B, theta, sigma_0, sigma_1, t, sigma_2)
+
+    # Deep zero-trust content inspection on Chunk 0 header before allocating buffers
+    header_chunk = await file.read(4096)
+    if not header_chunk:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+    try:
+        FileContentGuard.verify_universal_file(header_chunk, file.filename or "")
+    except SecurityValidationError as err:
+        raise HTTPException(status_code=415, detail=str(err))
+
+    # Rewind file pointer for streaming generator
+    await file.seek(0)
 
     async def encrypt_generator():
         file_encryptor = QuantumDNAFileEncryptor(key)
@@ -255,6 +278,19 @@ async def decrypt_file_route(
 ):
     key = parse_key_from_form(a, b, c, d, x0, y0, z0, w0, T, B, theta, sigma_0, sigma_1, t, sigma_2)
 
+    # Check initial chunk for disallowed plaintext image spoofing
+    header_chunk = await file.read(64)
+    if not header_chunk:
+        raise HTTPException(status_code=400, detail="Empty encrypted file uploaded")
+    if FileContentGuard.is_image_signature(header_chunk):
+        raise HTTPException(
+            status_code=415,
+            detail="Security Alert: Plaintext image uploaded to Universal File Decryptor. Decryption aborted."
+        )
+
+    # Rewind file pointer for streaming decryptor
+    await file.seek(0)
+
     async def decrypt_generator():
         file_decryptor = QuantumDNAFileDecryptor(key)
         chunk_size = 1024 * 1024 + 8
@@ -285,6 +321,12 @@ async def analyze_route(
 ):
     p_contents = await plain_file.read()
     c_contents = await cipher_file.read()
+    try:
+        FileContentGuard.verify_image_file(p_contents[:64], plain_file.filename or "plain.png")
+        FileContentGuard.verify_image_file(c_contents[:64], cipher_file.filename or "cipher.png")
+    except SecurityValidationError as err:
+        raise HTTPException(status_code=415, detail=str(err))
+
     P = decode_image(p_contents)
     C = decode_image(c_contents)
 
@@ -345,6 +387,11 @@ async def analyze_file_route(
     if len(p_contents) == 0 or len(c_contents) == 0:
         raise HTTPException(status_code=400, detail="Empty file uploaded")
         
+    try:
+        FileContentGuard.verify_universal_file(p_contents[:4096], plain_file.filename or "")
+    except SecurityValidationError as err:
+        raise HTTPException(status_code=415, detail=str(err))
+
     metrics = calculate_file_metrics(p_contents, c_contents, elapsed_sec)
     return {"metrics": metrics}
 

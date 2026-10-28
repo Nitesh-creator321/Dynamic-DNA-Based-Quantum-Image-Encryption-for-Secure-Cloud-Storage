@@ -69,6 +69,51 @@ The system integrates **4D Hyperchaotic Systems**, **Discrete-Time Quantum Walks
 
 ---
 
+## 🛡️ Zero-Trust Security & MIME Isolation Boundary
+
+To defend against **MIME confusion attacks**, **extension spoofing**, **polyglot payloads**, and **cross-pipeline contamination**, the platform enforces strict cryptographic and content-level isolation between the **Universal File Encryption** and **Image Encryption** engines.
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                   ZERO-TRUST MULTI-LAYER FIREWALL                        │
+├────────────────────────────────────┬─────────────────────────────────────┤
+│     UNIVERSAL FILE ENCRYPTION      │           IMAGE ENCRYPTION          │
+│    (Audio • Video • PDF • Docs)    │        (2D / 3D Pixel Matrix)       │
+├────────────────────────────────────┼─────────────────────────────────────┤
+│  ✅ PDF (.pdf)                     │  ✅ PNG (.png)                      │
+│  ✅ Office Docs (.docx, .xlsx,     │  ✅ JPEG (.jpg, .jpeg)              │
+│     .pptx, .doc, .xls, .ppt, .odt) │  ✅ WebP (.webp)                    │
+│  ✅ Audio (.mp3, .wav, .flac,      │  ✅ BMP (.bmp)                      │
+│     .ogg, .m4a, .opus, .aac)       │  ✅ TIFF (.tiff, .tif)              │
+│  ✅ Video (.mp4, .mkv, .avi,       │                                     │
+│     .mov, .webm)                   │  ❌ NO Audio / Video                │
+│  ✅ Plain Text / CSV (.txt, .csv)  │  ❌ NO PDF / Documents              │
+│  ❌ HARD BLOCK: ALL Image Formats  │  ❌ NO Executables / Archives       │
+│  🏷️ Payload Marker: QDNA_STRM_v1   │  🏷️ Payload Marker: QDNA_IMG_v1     │
+└────────────────────────────────────┴─────────────────────────────────────┘
+```
+
+### 1. Dual-Sided Verification Rules
+
+* **Universal File Encryption (1MB Chunk Streaming Pipeline):**
+  * **Strict Image Blacklist:** Any file carrying image extensions (`.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`, `.gif`, `.tiff`, `.svg`, `.ico`, `.heic`, `.avif`) is rejected outright at the door.
+  * **Zero-Trust Chunk 0 Inspection:** Before memory or 4D hyperchaotic state buffers are initialized, the backend validator inspects the first 4KB of Chunk 0. Any file bearing image magic byte signatures (e.g., `\xFF\xD8\xFF`, `\x89PNG`, `RIFF...WEBP`, `BM`) is immediately aborted with `HTTP 415 Unsupported Media Type`.
+  * **Structural File Validation:** PDFs must begin with `%PDF-`; Office OpenXML files (`.docx`, `.xlsx`, `.pptx`) are validated against ZIP container headers; audio and video files must exhibit approved container signatures (`ID3`, `RIFF...WAVE`, `fLaC`, `OggS`, `ftyp`).
+
+* **Image Encryption (Lossless Matrix Pipeline):**
+  * **Strict Image Whitelist:** Restricted to standard raster formats (`PNG`, `JPEG`, `WEBP`, `BMP`, `TIFF`).
+  * **Deep Image Header Verification:** Leading magic bytes are sniffed, followed by in-memory structural validation via `PIL.Image.verify()` and `cv2.imdecode()`.
+  * **Hard Rejection of Non-Images:** Renamed documents, audio files, video containers, and executables (e.g., `%PDF-`, `PK\x03\x04`, `ID3`, `\x1A\x45\xDF\xA3`) trigger instant rejection with `HTTP 415`.
+
+### 2. Elimination of Interchangeability
+
+* **Extension Spoofing Resistance:** Renaming an image (`photo.jpg` $\to$ `document.pdf`) fails deep inspection because the raw binary signature reveals the underlying image structure.
+* **MIME Header Forgery Immunity:** The system completely disregards client-supplied `Content-Type` headers, determining the real payload format solely from the binary byte signatures.
+* **Cryptographic Payload Isolation:** Encrypted outputs carry distinct container headers (`QDNA_STRM_v1` vs. `QDNA_IMG_v1`). Attempting to decrypt an encrypted image in the Universal File pipeline or an encrypted video in the Image pipeline results in an immediate compatibility rejection.
+* **Client-Side Pre-Flight Guard:** HTML5 `FileReader` and `ArrayBuffer` sniff the first 64 bytes inside the user's browser, preventing unauthorized network traffic and displaying immediate user feedback.
+
+---
+
 ## 🛠️ System Architecture & Workflow
 
 ```
@@ -146,6 +191,8 @@ QuantumDNA-Image-Encryption/
 │   ├── src/
 │   │   ├── App.jsx              # Main dashboard (Image cryptosystem & tabs)
 │   │   ├── FileEncryption.jsx   # Universal File Encryption & Interactive Charts
+│   │   ├── utils/
+│   │   │   └── fileGuard.js         # Client-side pre-flight array buffer sniffer
 │   │   ├── App.css              # Design system & responsive layout styling
 │   │   └── main.jsx             # React entry point
 │   ├── package.json
@@ -156,7 +203,8 @@ QuantumDNA-Image-Encryption/
 ├── quantum_module/
 │   └── quantum_walk.py          # Discrete-Time Quantum Walk (DTQW) simulation
 ├── utils/
-│   └── sequence_generator.py    # Sequence generation wrapper
+│   ├── sequence_generator.py    # Sequence generation wrapper
+│   └── file_guard.py            # Zero-trust MIME & magic-byte isolation guard
 ├── automated_tester.py          # Batch benchmark scanner
 ├── Dockerfile                   # Multi-stage production container setup
 ├── requirements.txt             # Python dependencies
@@ -214,6 +262,9 @@ Run the test suite to verify key sensitivity, chaos dynamics, and backend routes
 ```powershell
 # Verify backend API endpoints
 python test_backend.py
+
+# Verify zero-trust MIME & magic byte boundary
+python test_file_guard.py
 
 # Verify 4D Hyperchaotic map bifurcation & Lyapuonv dynamics
 python test_chaos.py

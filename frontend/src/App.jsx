@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import './App.css';
 import FileEncryption from './FileEncryption';
+import { validateImageUpload } from './utils/fileGuard';
 
 const INITIAL_KEY = {
   a: 0.9,
@@ -38,6 +39,8 @@ export default function App() {
   const [imageStatus, setImageStatus] = useState('System Ready');
   const [imageProgress, setImageProgress] = useState(0);
   const [imageElapsedTime, setImageElapsedTime] = useState('0.0');
+  const [imageError, setImageError] = useState(null);
+  const imageFileInputRef = useRef(null);
 
   // Universal File Encryption State tracked at parent level for global indicators
   const [isFileProcessing, setIsFileProcessing] = useState(false);
@@ -47,9 +50,27 @@ export default function App() {
     setKeys((prev) => ({ ...prev, [param]: value }));
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      const ext = ('.' + file.name.split('.').pop()).toLowerCase();
+      const check = await validateImageUpload(file);
+      if (!check.valid) {
+        setImageError({
+          filename: file.name,
+          format: ext,
+          message: check.error,
+          suggestion: 'Documents, audio, and video files must be encrypted via the "Universal File Encryption" tab.'
+        });
+        setImageStatus('Upload Blocked: Invalid Format');
+        setSelectedFile(null);
+        setPlainImageSrc(null);
+        if (imageFileInputRef.current) {
+          imageFileInputRef.current.value = '';
+        }
+        return;
+      }
+      setImageError(null);
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -95,7 +116,10 @@ export default function App() {
         body: formData,
       });
 
-      if (!res.ok) throw new Error('Encryption request failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Encryption request failed');
+      }
       const data = await res.json();
 
       const encSrc = `data:image/png;base64,${data.image}`;
@@ -154,7 +178,10 @@ export default function App() {
         body: formData,
       });
 
-      if (!res.ok) throw new Error('Decryption request failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || 'Decryption request failed');
+      }
       const data = await res.json();
 
       setDecryptedImageSrc(`data:image/png;base64,${data.image}`);
@@ -234,12 +261,12 @@ export default function App() {
             </button>
           </div>
 
-          <div className={`header-status-badge ${isImageProcessing || isFileProcessing ? 'busy' : ''}`}>
+          <div className={`header-status-badge ${isImageProcessing || isFileProcessing ? 'busy' : ((activeTab === 'image' && imageError) || fileStatus.includes('Blocked') ? 'error' : '')}`}>
             <span className="status-indicator"></span>
             <span className="header-status-text">
               {activeTab === 'image'
-                ? (isImageProcessing ? imageStatus : (isFileProcessing ? 'Image Ready • File Active' : imageStatus))
-                : (isFileProcessing ? (fileStatus.length > 28 ? fileStatus.slice(0, 28) + '...' : fileStatus) : (isImageProcessing ? 'File Ready • Image Active' : (fileStatus || 'System Ready')))}
+                ? (imageError ? 'Upload Blocked • See Alert Below' : (isImageProcessing ? imageStatus : (isFileProcessing ? 'Image Ready • File Active' : imageStatus)))
+                : (fileStatus.includes('Blocked') ? 'Upload Blocked • See Alert Below' : (isFileProcessing ? (fileStatus.length > 28 ? fileStatus.slice(0, 28) + '...' : fileStatus) : (isImageProcessing ? 'File Ready • Image Active' : (fileStatus || 'System Ready'))))}
             </span>
           </div>
         </div>
@@ -305,6 +332,7 @@ export default function App() {
               keys={keys}
               onProcessingChange={setIsFileProcessing}
               onStatusChange={setFileStatus}
+              onSwitchTab={setActiveTab}
             />
           </div>
 
@@ -326,8 +354,9 @@ export default function App() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', width: '100%', flexWrap: 'wrap' }}>
                   <div className="file-input-wrapper">
                     <input
+                      ref={imageFileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/webp,image/bmp,image/tiff,.png,.jpg,.jpeg,.webp,.bmp,.tiff,.tif"
                       onChange={handleFileChange}
                       disabled={isImageProcessing}
                     />
@@ -347,8 +376,77 @@ export default function App() {
                     >
                       {isImageProcessing && imageProcessType === 'decrypt' ? 'Decrypting...' : 'Decrypt Image'}
                     </button>
+                    {(selectedFile || imageError) && !isImageProcessing && (
+                      <button
+                        className="btn btn-outline"
+                        onClick={() => {
+                          setSelectedFile(null);
+                          setPlainImageSrc(null);
+                          setEncryptedImageSrc(null);
+                          setDecryptedImageSrc(null);
+                          setMetrics(null);
+                          setCharts(null);
+                          setProfiling(null);
+                          setImageError(null);
+                          setImageStatus('System Ready');
+                          if (imageFileInputRef.current) imageFileInputRef.current.value = '';
+                        }}
+                        title="Clear selection"
+                      >
+                        Clear
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Inline Security Alert Banner if non-image is selected */}
+                {imageError && (
+                  <div className="file-security-alert">
+                    <div className="security-alert-icon">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                    </div>
+                    <div className="security-alert-content">
+                      <div className="security-alert-badge-row">
+                        <span className="security-alert-badge">SECURITY GUARD</span>
+                        <span className="security-alert-filetype">{imageError.format ? imageError.format.toUpperCase() : 'NON-IMAGE'} REJECTED</span>
+                      </div>
+                      <div className="security-alert-title">
+                        Cannot upload "{imageError.filename}"
+                      </div>
+                      <div className="security-alert-message">
+                        {imageError.message}
+                      </div>
+                      {imageError.suggestion && (
+                        <div className="security-alert-hint">
+                          <span className="hint-icon">💡</span>
+                          <span>{imageError.suggestion}</span>
+                          <button
+                            type="button"
+                            className="switch-tab-link"
+                            onClick={() => {
+                              setActiveTab('file');
+                              setImageError(null);
+                            }}
+                          >
+                            Switch to Universal File Encryption &rarr;
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="security-alert-close"
+                      onClick={() => setImageError(null)}
+                      title="Dismiss alert"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                )}
 
                 {isImageProcessing && (
                   <div className="progress-container">

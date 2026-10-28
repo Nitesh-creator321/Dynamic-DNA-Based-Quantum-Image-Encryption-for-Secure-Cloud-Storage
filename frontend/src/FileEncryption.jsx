@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { validateUniversalUpload } from './utils/fileGuard';
 
 // Abramowitz & Stegun erf/erfc approximation for p-value estimation
 function erfc(x) {
@@ -540,7 +541,8 @@ function CorrelationScatterChart({ charts, corrCipher, corrPlain }) {
   );
 }
 
-export default function FileEncryption({ keys, onProcessingChange, onStatusChange }) {
+export default function FileEncryption({ keys, onProcessingChange, onStatusChange, onSwitchTab }) {
+  const [fileError, setFileError] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processType, setProcessType] = useState(null);
@@ -574,9 +576,26 @@ export default function FileEncryption({ keys, onProcessingChange, onStatusChang
     }
   };
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      const ext = ('.' + file.name.split('.').pop()).toLowerCase();
+      const check = await validateUniversalUpload(file);
+      if (!check.valid) {
+        setFileError({
+          filename: file.name,
+          format: ext,
+          message: check.error,
+          suggestion: 'Image files (PNG, JPEG, WEBP, BMP, TIFF) must be encrypted via the "Image Encryption" tab.'
+        });
+        updateStatus('Upload Blocked: Invalid Format');
+        setSelectedFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+      setFileError(null);
       setSelectedFile(file);
       if (downloadData?.url) {
         window.URL.revokeObjectURL(downloadData.url);
@@ -602,6 +621,7 @@ export default function FileEncryption({ keys, onProcessingChange, onStatusChang
     setFileMetrics(null);
     setDecryptionMetrics(null);
     setSelectedFile(null);
+    setFileError(null);
     setProgress(0);
     setProcessedBytes(0);
     setTotalBytes(0);
@@ -653,7 +673,10 @@ export default function FileEncryption({ keys, onProcessingChange, onStatusChang
         body: formData,
       });
 
-      if (!response.ok) throw new Error('Encryption failed on server');
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.detail || 'Encryption failed on server');
+      }
 
       const reader = response.body.getReader();
       const chunks = [];
@@ -742,7 +765,10 @@ export default function FileEncryption({ keys, onProcessingChange, onStatusChang
         body: formData,
       });
 
-      if (!response.ok) throw new Error('Decryption failed on server');
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson.detail || 'Decryption failed on server');
+      }
 
       const reader = response.body.getReader();
       const chunks = [];
@@ -805,14 +831,16 @@ export default function FileEncryption({ keys, onProcessingChange, onStatusChang
         </p>
       </div>
 
-      <div className="action-bar">
+      {/* Action Bar */}
+      <div className="action-bar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', width: '100%', flexWrap: 'wrap' }}>
         <div className="file-input-wrapper">
           <input
             ref={fileInputRef}
             type="file"
             onChange={handleFileChange}
             disabled={isProcessing}
-            accept=".mp3,.wav,.mp4,.avi,.mkv,.pdf,.doc,.docx,.zip,.enc,*"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.txt,.csv,.mp3,.wav,.flac,.ogg,.m4a,.opus,.aac,.mp4,.mkv,.avi,.mov,.webm,.enc,audio/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.*"
           />
         </div>
         <div className="btn-group">
@@ -830,7 +858,7 @@ export default function FileEncryption({ keys, onProcessingChange, onStatusChang
           >
             {isProcessing && processType === 'decrypt' ? 'Decrypting...' : 'Decrypt .enc'}
           </button>
-          {selectedFile && !isProcessing && (
+          {(selectedFile || fileError) && !isProcessing && (
             <button
               className="btn btn-outline"
               onClick={handleClearFile}
@@ -840,6 +868,59 @@ export default function FileEncryption({ keys, onProcessingChange, onStatusChang
             </button>
           )}
         </div>
+      </div>
+
+      {/* Inline Security Alert Banner if image is uploaded */}
+      {fileError && (
+        <div className="file-security-alert">
+          <div className="security-alert-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div className="security-alert-content">
+            <div className="security-alert-badge-row">
+              <span className="security-alert-badge">SECURITY GUARD</span>
+              <span className="security-alert-filetype">{fileError.format ? fileError.format.toUpperCase() : 'IMAGE'} REJECTED</span>
+            </div>
+            <div className="security-alert-title">
+              Cannot upload "{fileError.filename}"
+            </div>
+            <div className="security-alert-message">
+              {fileError.message}
+            </div>
+            {fileError.suggestion && (
+              <div className="security-alert-hint">
+                <span className="hint-icon">💡</span>
+                <span>{fileError.suggestion}</span>
+                {onSwitchTab && (
+                  <button
+                    type="button"
+                    className="switch-tab-link"
+                    onClick={() => {
+                      onSwitchTab('image');
+                      setFileError(null);
+                    }}
+                  >
+                    Switch to Image Encryption &rarr;
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="security-alert-close"
+            onClick={() => setFileError(null)}
+            title="Dismiss alert"
+          >
+            &times;
+          </button>
+        </div>
+      )}
+
       </div>
 
       {/* Status & Streaming Progress */}
