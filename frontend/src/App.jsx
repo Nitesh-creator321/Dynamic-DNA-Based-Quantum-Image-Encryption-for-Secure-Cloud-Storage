@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import FileEncryption from './FileEncryption';
+import AnalysisPage from './AnalysisPage';
 import { validateImageUpload } from './utils/fileGuard';
 
 const INITIAL_KEY = {
@@ -21,6 +22,18 @@ const INITIAL_KEY = {
 };
 
 export default function App() {
+  const [currentPage, setCurrentPage] = useState(() => {
+    return window.location.pathname === '/analyze' || window.location.hash === '#analyze' ? 'analyze' : 'app';
+  });
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPage(window.location.pathname === '/analyze' || window.location.hash === '#analyze' ? 'analyze' : 'app');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [activeTab, setActiveTab] = useState('image'); // 'image' or 'file'
   const [keys, setKeys] = useState(INITIAL_KEY);
 
@@ -231,6 +244,17 @@ export default function App() {
     a.remove();
   };
 
+  if (currentPage === 'analyze') {
+    return (
+      <AnalysisPage
+        onBack={() => {
+          window.history.pushState({}, '', '/');
+          setCurrentPage('app');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="app-container">
       {/* Header */}
@@ -244,6 +268,22 @@ export default function App() {
         </h1>
 
         <div className="header-controls">
+          <button
+            className="btn btn-outline"
+            onClick={() => {
+              window.history.pushState({}, '', '/analyze');
+              setCurrentPage('analyze');
+            }}
+            style={{
+              padding: '0.45rem 1.1rem',
+              fontSize: '0.825rem',
+              fontWeight: '600',
+              borderRadius: 'var(--radius-md)'
+            }}
+          >
+            Analyze
+          </button>
+
           <div className="nav-tabs">
             <button
               className={`nav-tab-btn ${activeTab === 'image' ? 'active' : ''}`}
